@@ -5,60 +5,20 @@ on:
     types: [opened, synchronize, reopened]
 
 env:
-  PR_NUMBER: ${{ github.event.number }}
-
-  # the version of the code that should be deployed and tested, which is the head of the source branch
-  PR_REF: ${{ github.head_ref }}
-  GH_API_TOKEN: ${{ secrets.GH_TOKEN_ACCESS_PLAYWRIGHT }}
-
   # EDIT ME
   # `createEnv.sh` sends a dispatch request to test-instance to create a new on-demand environment.
   # The payload of the request needs to include a property telling test-instance which branch to use for this project.
-  # This variable indicates the name of that property.
+  # This variable indicates the NAME of that property. The VALUE (branch name) is automatically retrieved.
   BRANCH_KEY: webBranch
 jobs:
   create-on-demand-env:
     name: Create On Demand Env for E2E Tests
     runs-on: ubuntu-latest
     timeout-minutes: 35
-    env:
-      webEnvBaseUrl: "pr${{ github.event.number }}.swipesimpleqa.com"
-
     steps:
-      - uses: actions/checkout@v4
+      - uses: ./on-demand-testing-workflows/e2e_tests.setup.yml
         with:
-          ref: ${{ github.head_ref }}
-          sparse-checkout: .github
-          submodules: 'true'
-          
-      - name: Trigger On-Demand Env Creation
-        run: |
-          chmod u+x "${GITHUB_WORKSPACE}/.github/workflows/on-demand-testing-workflows/e2e_tests/createEnv.sh"
-          "${GITHUB_WORKSPACE}/.github/workflows/on-demand-testing-workflows/e2e_tests/createEnv.sh"
-
-          # sleep for a few seconds for GitHub to respond to the new job being requested.  Confirmed that there is a delay from when the API responds claiming success from
-          # the POST above, and when it will actually return the new job from the "actions/runs" endpoint below.
-          sleep 10
-
-             
-      - name: Poll for On-Demand Env Ready
-        timeout-minutes: 30
-        run: |
-          # the following line is temporary until we work through some flakiness.  When the below script fails to collect a list of PRs that includes the new one, we want
-          # to know if that is because it was in an unexpected state, or if GitHub simply hadn't responded to the run being added yet.  So for now, before running the script
-          # which will collect the list of runs, get the entire list and dump it to a file.
-          curl -L -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${{ secrets.GH_TOKEN_ACCESS_PLAYWRIGHT }}" -H "X-GitHub-Api-Version: 2022-11-28" "https://api.github.com/repos/CardFlight/test-instance/actions/runs?event=repository_dispatch" > debug.txt
-
-          chmod u+x "${GITHUB_WORKSPACE}/.github/workflows/on-demand-testing-workflows/e2e_tests/waitForEnvReady.sh"
-          "${GITHUB_WORKSPACE}/.github/workflows/on-demand-testing-workflows/e2e_tests/waitForEnvReady.sh"
-
-      - uses: actions/upload-artifact@v3
-        if: always()
-        with:
-          name: debug output
-          path: |
-            debug.txt
-          retention-days: 7
+          branch-key: $BRANCH_KEY
     
   run-e2e-tests:
     name: Run E2E Tests
@@ -73,6 +33,7 @@ jobs:
       # EDIT ME
       # Environment variables needed by your e2e tests can be defined here.
       webEnvBaseUrl: "pr${{ github.event.number }}.swipesimpleqa.com"
+      GH_API_TOKEN: ${{ secrets.GH_TOKEN_ACCESS_PLAYWRIGHT }}
     steps:
       - name: Checkout E2E Tests
         uses: actions/checkout@v4
@@ -82,8 +43,8 @@ jobs:
           # If only specific folders are needed for your e2e tests, you can speed up the checkout process by defining them here.
           sparse-checkout: swipesimpleweb-playwright-automation
           
-        # EDIT ME
-        # Enter the commands required to run your e2e tests.
+      # EDIT ME
+      # Enter the commands required to run your e2e tests.
       - name: Run SwipeSimple Web tests
         run: |
           source ~/.virtualenvs/e2eTests/bin/activate
@@ -91,8 +52,8 @@ jobs:
           
           xvfb-run pytest --tracing=retain-on-failure --html=E2ETestResults.html --self-contained-html -m pr
         
-        # EDIT ME
-        # Update the path to any files output by your e2e tests.
+      # EDIT ME
+      # Update the path to any files output by your e2e tests.
       - uses: actions/upload-artifact@v3
         if: always()
         with:
