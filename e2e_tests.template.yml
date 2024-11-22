@@ -29,6 +29,7 @@ jobs:
         with:
           ref: ${{ github.head_ref }}
           sparse-checkout: .github
+          submodules: 'true'
           
       - name: Trigger On-Demand Env Creation
         run: |
