@@ -1,7 +1,3 @@
-# TO USE:
-# - In your `.github/workflows` folder, run `git submodule add git@github.com:CardFlight/on-demand-testing-workflows.git`.
-# 
-
 name: E2E Tests
 
 on:
