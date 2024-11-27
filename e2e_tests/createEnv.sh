@@ -2,6 +2,7 @@
 
 # when testing this locally, you'll have to first set the following environment variables in your bash session:
     # export GH_API_TOKEN=(your personal github token)
+    # export BRANCH_KEY=(the key used by test-instance to set the branch of the project in PR)
     # export PR_REF=(the PR source branch name)
     # export PR_NUMBER=(the PR number)
 
