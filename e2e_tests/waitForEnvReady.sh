@@ -77,12 +77,18 @@ fi
 
 # poll the github api to see when this workflow run reaches the completed state
 # Note that while this is an infinite loop in this script, there are timeouts in the workflow so that it can't run forever in that context.
-workflowStatus="in_progress"
-while [[ "$workflowStatus" == "in_progress" ]]; do
-    sleep 30   # throttle how often it polls
+while true; do
     getWorkflowResponse=$(curl -L -H "Accept: application/vnd.github+json" -H "Authorization: Bearer $GH_API_TOKEN" -H "X-GitHub-Api-Version: 2022-11-28" "https://api.github.com/repos/CardFlight/test-instance/actions/runs/$createEnvWorkflowRunId")
     workflowStatus=$(echo $getWorkflowResponse | jq -r .status)
     echo "Workflow status is currently: $workflowStatus"
+
+    case $workflowStatus in
+        "in_progress" | "queued")
+            sleep 30   # throttle how often it polls
+            ;;
+        *)
+            break
+    esac
 done
 
 if [[ "$workflowStatus" != "completed" ]]
