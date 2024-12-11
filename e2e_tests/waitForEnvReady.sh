@@ -2,8 +2,7 @@
 
 # when testing this locally, you'll have to first set the following environment variables in your bash session:
     # export GH_API_TOKEN=(your personal github token)
-    # export PR_REF=(the PR source branch name)
-    # export PR_NUMBER=(the PR number)
+    # export UNIQUE_ENV_NAME=(the name of the on-demand environment)
 
 # loop through each of the workflow statuses that are believed to be possible at this point, and collect all of the matches.  This is difficult to know what exact statuses to look at since the GitHub Actions documentation
 # doesn't actually explain what these mean, so this is an educated guess based on just the status names.  See list at https://docs.github.com/en/rest/actions/workflow-runs?apiVersion=2022-11-28
@@ -32,29 +31,29 @@ then
 fi
 
 
-# out of the total workflow runs matching the statuses, find the run(s) matching this PR.
-# Do this by matching name, since the workflow that creates OD envs names each workflow run based on the PR number given to it.
-allRunsMatchingThisPr=$(echo $allMatchingRuns | jq -r --arg PR_NAME "create env pr$PR_NUMBER" '[.[] | select(.name == $PR_NAME)] | unique_by(.id)')
-allRunsMatchingThisPrCount=$(echo $allRunsMatchingThisPr | jq length)
-echo "Found $allRunsMatchingThisPrCount workflow runs matching this PR."
-if [[ $allRunsMatchingThisPrCount -eq 0 ]]
+# out of the total workflow runs matching the statuses, find the run(s) matching the provided environment name.
+# Do this by matching name, since the workflow that creates OD envs names each workflow run based on unique environment name given to it.
+allRunsMatching=$(echo $allMatchingRuns | jq -r --arg WORKFLOW_RUN_NAME "create env $UNIQUE_ENV_NAME" '[.[] | select(.name == $WORKFLOW_RUN_NAME)] | unique_by(.id)')
+allRunsMatchingCount=$(echo $allRunsMatching | jq length)
+echo "Found $allRunsMatchingCount workflow runs matching this environment name."
+if [[ $allRunsMatchingCount -eq 0 ]]
 then
-    echo "Did not find any runs of the workflow that creates on-demand environments which matched this PR."
+    echo "Did not find any runs of the workflow that creates on-demand environments which matched this environment name."
     exit 1
 fi
 
 
-# It is possible there are multiple matching runs for this PR from previous e2e test runs.  (For example, this happens if someone opens a PR and then soon thereafter pushes
+# It is possible there are multiple matching runs.  (For example, in the case of pull requests, this happens if someone opens a PR and then soon thereafter pushes
 # a commit to the same branch, which would result in one run triggered by the PR being opened and another by the "syncrhonize" trigger.) In this case several things are necessary:
 # 1) identify the most recent run
-createEnvWorkflowRunId=$(echo $allRunsMatchingThisPr | jq 'max_by(.created_at)' | jq .id)
+createEnvWorkflowRunId=$(echo $allRunsMatching | jq 'max_by(.created_at)' | jq .id)
 echo "Latest workflow run ID is: $createEnvWorkflowRunId"
 
 # 2) cancel those that are not the most recent.  Otherwise the second on-demand environment will overwrite the first, which could cause tests to fail due to the env changing during runtime.
-if [[ $allRunsMatchingThisPrCount -gt 1 ]]
+if [[ $allRunsMatchingCount -gt 1 ]]
 then
-    echo "Found multiple matching workflows for this PR, so will cancel all those that are not the most recent."
-    runsToCancel=$(echo $allRunsMatchingThisPr | jq -r --argjson LATEST "$createEnvWorkflowRunId" '[.[] | select(.id != $LATEST)]' | jq '[.[].id]')
+    echo "Found multiple matching workflows for this environment name, so will cancel all those that are not the most recent."
+    runsToCancel=$(echo $allRunsMatching | jq -r --argjson LATEST "$createEnvWorkflowRunId" '[.[] | select(.id != $LATEST)]' | jq '[.[].id]')
     echo "Will cancel runs with these IDs:"
     echo $runsToCancel
 
@@ -67,7 +66,7 @@ then
             -H "X-GitHub-Api-Version: 2022-11-28" \
             "https://api.github.com/repos/CardFlight/test-instance/actions/runs/$runId/cancel")
 
-        if [[ $createEnvResponse -ne "202" ]];
+        if [[ $cancelResponse -ne "202" ]];
         then
             echo "WARNING: Got response $cancelResponse back from attempting to cancel an outdated on-demand env creation workflow run.  This may cause problems later on."
         fi
